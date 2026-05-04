@@ -1,0 +1,25 @@
+name: Dependabot Alert Gate
+on: [pull_request]
+
+permissions:
+  security-events: read
+  contents: read
+
+jobs:
+  check-alerts:
+    name: Check Dependabot Alerts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for open HIGH+ alerts
+        env:
+          GH_TOKEN: ${{ secrets.AK_BUILDBOT_PAT }}
+        run: |
+          alerts=$(gh api repos/${{ github.repository }}/dependabot/alerts \
+            --jq '[.[] | select(.state=="open" and (.security_advisory.severity=="high" or .security_advisory.severity=="critical"))]')
+          count=$(echo "$alerts" | jq 'length')
+          if [ "$count" -gt 0 ]; then
+            echo "::error::$count open HIGH/CRITICAL Dependabot alerts must be resolved before merging"
+            echo "$alerts" | jq -r '.[] | "  - \(.security_advisory.severity | ascii_upcase): \(.security_vulnerability.package.name) — \(.security_advisory.summary)"'
+            exit 1
+          fi
+          echo "No open HIGH/CRITICAL Dependabot alerts"
